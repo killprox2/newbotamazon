@@ -1,11 +1,11 @@
 require('dotenv').config(); // Charger les variables d'environnement
 
-const request = require('request-promise');
+const axios = require('axios');
 const cheerio = require('cheerio');
-const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const winston = require('winston');
 
-// Configurer les logs
+// Configurer les logs avec Winston
 const logger = winston.createLogger({
     level: 'info',
     format: winston.format.combine(
@@ -55,12 +55,14 @@ async function sendLogToChannel(logMessage) {
 
 // Fonction pour faire une requête avec ScraperAPI
 async function scrapeWithScraperAPI(url) {
-    const apiKey = process.env.SCRAPER_API_KEY || '8c3917aa283d5ec47384e796e45f22dd'; // Utiliser la clé d'API ScraperAPI
+    const apiKey = process.env.SCRAPER_API_KEY;
     const fullUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${url}`;
 
     try {
-        const response = await request(fullUrl);
-        return response;
+        const response = await axios.get(fullUrl);
+        console.log("En-têtes de réponse:", response.headers); // Log des en-têtes
+        console.log("Réponse reçue de ScraperAPI:", response.data); // Log de la réponse
+        return response.data;
     } catch (error) {
         logger.error(`Erreur lors de la requête ScraperAPI : ${error.message}`);
         sendLogToChannel(`⚠️ Erreur lors de la requête ScraperAPI : ${error.message}`);
@@ -79,7 +81,7 @@ async function scrapeAmazon(category, channelID) {
         sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}** : [Lien](${url})`);
 
         try {
-            // Utilisation de ScraperAPI
+            // Utilisation de ScraperAPI avec Axios
             const data = await scrapeWithScraperAPI(url);
 
             const $ = cheerio.load(data);
@@ -96,7 +98,7 @@ async function scrapeAmazon(category, channelID) {
                     const newPrice = parseFloat(priceNew.replace(/[^\d,.-]/g, '').replace(',', '.'));
                     const discount = ((oldPrice - newPrice) / oldPrice) * 100;
 
-                    if (discount >= 40) {
+                    if (discount >= 50) { // Modifié à 50% de réduction minimum
                         products.push({
                             title: title,
                             link: `https://www.amazon.fr${link}`,
@@ -109,7 +111,7 @@ async function scrapeAmazon(category, channelID) {
             });
 
             if (products.length > 0) {
-                const embed = new MessageEmbed()
+                const embed = new EmbedBuilder()
                     .setTitle(`Produits avec réduction dans la catégorie ${category}`)
                     .setColor('#ff9900')
                     .setDescription(products.map(p => `**${p.title}**\nAncien prix: ${p.oldPrice}€, Nouveau prix: ${p.newPrice}€, Réduction: ${p.discount}%\n[Lien](${p.link})`).join('\n\n'));
