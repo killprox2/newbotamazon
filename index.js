@@ -1,6 +1,6 @@
 require('dotenv').config(); // Charger les variables d'environnement
 
-const axios = require('axios');
+const request = require('request-promise');
 const cheerio = require('cheerio');
 const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
 const winston = require('winston');
@@ -53,35 +53,21 @@ async function sendLogToChannel(logMessage) {
     }
 }
 
-// Fonction pour effectuer une requête avec des réessais en cas d'échec
-async function axiosGetWithRetry(url, retries = 3) {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const response = await axios.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
-                    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'DNT': '1',
-                    'Upgrade-Insecure-Requests': '1',
-                    'TE': 'Trailers'
-                }
-            });
-            return response;
-        } catch (error) {
-            if (attempt < retries) {
-                logger.warn(`Erreur lors de la tentative ${attempt}, nouvelle tentative dans 5 secondes...`);
-                await new Promise(resolve => setTimeout(resolve, 5000)); // Attendre 5 secondes avant de réessayer
-            } else {
-                logger.error(`Erreur après ${retries} tentatives : ${error.message}`);
-                throw error;
-            }
-        }
+// Fonction pour faire une requête avec ScraperAPI
+async function scrapeWithScraperAPI(url) {
+    const apiKey = process.env.SCRAPER_API_KEY; // Utiliser une clé d'API ScraperAPI stockée dans .env
+    const fullUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${url}`;
+
+    try {
+        const response = await request(fullUrl);
+        return response;
+    } catch (error) {
+        logger.error(`Erreur lors de la requête ScraperAPI : ${error.message}`);
+        throw error;
     }
 }
 
-// Scraping avec Cheerio et Axios
+// Scraping avec Cheerio et ScraperAPI
 async function scrapeAmazon(category, channelID) {
     logger.info(`Scraping démarré pour la catégorie ${category}.`);
     sendLogToChannel(`📄 Scraping démarré pour la catégorie **${category}**.`);
@@ -92,8 +78,8 @@ async function scrapeAmazon(category, channelID) {
         sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}** : [Lien](${url})`);
 
         try {
-            // Utilisation de la fonction axiosGetWithRetry pour gérer les réessais
-            const { data } = await axiosGetWithRetry(url);
+            // Utilisation de ScraperAPI
+            const data = await scrapeWithScraperAPI(url);
 
             const $ = cheerio.load(data);
             let products = [];
