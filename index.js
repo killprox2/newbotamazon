@@ -40,7 +40,7 @@ const categoryChannels = {
     "bebe": "ID_SALON_BEBE",
     "bricolage": "ID_SALON_BRICOLAGE",
     "jardin": "ID_SALON_JARDIN",
-    "logs": "1285977835365994506" // ID du salon pour les logs
+    "logs": "1285977835365994506" // Remplace avec l'ID du salon de logs
 };
 
 // Fonction pour envoyer des logs dans le salon de logs
@@ -53,54 +53,22 @@ async function sendLogToChannel(logMessage) {
     }
 }
 
-// Fonction pour faire une requête avec ScraperAPI
-async function scrapeWithScraperAPI(url) {
-    const apiKey = process.env.SCRAPER_API_KEY;
-    if (!apiKey) {
-        throw new Error('La clé ScraperAPI n\'est pas définie dans les variables d\'environnement');
-    }
-
-    const fullUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(url)}`;
-
-    try {
-        const response = await axios.get(fullUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-            }
-        });
-
-        if (response.data.error) {
-            throw new Error(`Erreur ScraperAPI: ${response.data.error}`);
-        }
-        return response.data;
-    } catch (error) {
-        if (error.response) {
-            logger.error(`Erreur lors de la requête ScraperAPI (Statut ${error.response.status}) : ${error.response.data}`);
-            sendLogToChannel(`⚠️ Erreur lors de la requête ScraperAPI (Statut ${error.response.status}) : ${error.response.data}`);
-        } else if (error.request) {
-            logger.error('Aucune réponse reçue de ScraperAPI.');
-            sendLogToChannel('⚠️ Aucune réponse reçue de ScraperAPI.');
-        } else {
-            logger.error(`Erreur lors de la configuration de la requête : ${error.message}`);
-            sendLogToChannel(`⚠️ Erreur lors de la configuration de la requête : ${error.message}`);
-        }
-        throw error;
-    }
-}
-
-// Scraping avec Cheerio et ScraperAPI
+// Scraping avec Axios et Cheerio
 async function scrapeAmazon(category, channelID) {
     logger.info(`Scraping démarré pour la catégorie ${category}.`);
     sendLogToChannel(`📄 Scraping démarré pour la catégorie **${category}**.`);
 
-    for (let i = 1; i <= 50; i++) {
+    for (let i = 1; i <= 5; i++) {  // Limité à 5 pages pour tester
         const url = `https://www.amazon.fr/s?k=${category}&page=${i}`;
         logger.info(`Accès à la page ${i} pour la catégorie ${category} : ${url}`);
         sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}** : [Lien](${url})`);
 
         try {
-            // Utilisation de ScraperAPI avec Axios
-            const data = await scrapeWithScraperAPI(url);
+            const { data } = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+                }
+            });
 
             const $ = cheerio.load(data);
             let products = [];
@@ -116,7 +84,7 @@ async function scrapeAmazon(category, channelID) {
                     const newPrice = parseFloat(priceNew.replace(/[^\d,.-]/g, '').replace(',', '.'));
                     const discount = ((oldPrice - newPrice) / oldPrice) * 100;
 
-                    if (discount >= 50) { // Modifié à 50% de réduction minimum
+                    if (discount >= 50) {
                         products.push({
                             title: title,
                             link: `https://www.amazon.fr${link}`,
@@ -145,21 +113,13 @@ async function scrapeAmazon(category, channelID) {
             }
 
         } catch (error) {
-            if (error.response) {
-                logger.error(`Erreur lors de l'accès à la page ${i} pour la catégorie ${category}: Statut ${error.response.status} - ${error.response.data}`);
-                sendLogToChannel(`⚠️ Erreur lors de l'accès à la page **${i}** pour la catégorie **${category}**: Statut ${error.response.status} - ${error.response.data}`);
-            } else if (error.request) {
-                logger.error(`Aucune réponse reçue de ScraperAPI pour la page ${i} de la catégorie ${category}`);
-                sendLogToChannel(`⚠️ Aucune réponse reçue de ScraperAPI pour la page **${i}** de la catégorie **${category}**.`);
-            } else {
-                logger.error(`Erreur lors de la requête pour la page ${i} de la catégorie ${category}: ${error.message}`);
-                sendLogToChannel(`⚠️ Erreur lors de la requête pour la page **${i}** de la catégorie **${category}**: ${error.message}`);
-            }
-            continue; // Passe à la page suivante en cas d'erreur
+            logger.error(`Erreur lors de l'accès à la page ${i} pour la catégorie ${category}: ${error.message}`);
+            sendLogToChannel(`⚠️ Erreur lors de l'accès à la page **${i}** pour la catégorie **${category}**: ${error.message}`);
+            continue;  // Passe à la page suivante en cas d'erreur
         }
 
         // Délai pour éviter une surcharge
-        await new Promise(resolve => setTimeout(resolve, 70000)); // Augmente le délai à 70 secondes entre chaque requête
+        await new Promise(resolve => setTimeout(resolve, 30000));  // Attente de 30 secondes entre chaque requête
     }
 }
 
@@ -177,7 +137,7 @@ async function startScraping() {
 client.once('ready', () => {
     logger.info('Bot is ready!');
     sendLogToChannel('⚙️ Le bot a démarré et est prêt à scraper.');
-    startScraping(); // Lancer le scraping dès que le bot est prêt
+    startScraping();  // Lancer le scraping dès que le bot est prêt
 });
 
 client.login(process.env.TOKEN);
