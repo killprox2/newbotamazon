@@ -5,7 +5,7 @@ const cheerio = require('cheerio');
 const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
 const winston = require('winston');
 
-// Configurer les logs
+// Configurer les logs avec Winston
 const logger = winston.createLogger({
     level: 'info',
     format: winston.format.combine(
@@ -18,6 +18,12 @@ const logger = winston.createLogger({
         new winston.transports.Console(),
         new winston.transports.File({ filename: 'bot_logs.log' })
     ]
+});
+
+// Gestion globale des exceptions
+process.on('unhandledRejection', (error) => {
+    logger.error('Unhandled promise rejection:', error);
+    sendLogToChannel(`❌ **Unhandled promise rejection**: ${error.message}`);
 });
 
 // Initialiser le client Discord
@@ -55,7 +61,7 @@ async function sendLogToChannel(logMessage) {
 
 // Fonction pour faire une requête avec ScraperAPI
 async function scrapeWithScraperAPI(url) {
-    const apiKey = process.env.SCRAPER_API_KEY; // Utiliser une clé d'API ScraperAPI stockée dans .env
+    const apiKey = process.env.SCRAPER; // Utiliser une clé d'API ScraperAPI stockée dans .env
     const fullUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${url}`;
 
     try {
@@ -63,6 +69,7 @@ async function scrapeWithScraperAPI(url) {
         return response;
     } catch (error) {
         logger.error(`Erreur lors de la requête ScraperAPI : ${error.message}`);
+        sendLogToChannel(`⚠️ Erreur lors de la requête ScraperAPI : ${error.message}`);
         throw error;
     }
 }
@@ -130,7 +137,7 @@ async function scrapeAmazon(category, channelID) {
         }
 
         // Délai pour éviter une surcharge
-        await new Promise(resolve => setTimeout(resolve, 60000)); // Augmente le délai à 60 secondes entre chaque requête
+        await new Promise(resolve => setTimeout(resolve, 60000)); // Délai de 60 secondes entre chaque requête
     }
 }
 
