@@ -39,7 +39,7 @@ const categoryChannels = {
     "bebe": "ID_SALON_BEBE",
     "bricolage": "ID_SALON_BRICOLAGE",
     "jardin": "ID_SALON_JARDIN",
-    "logs": "ID_SALON_LOGS" // ID du salon pour les logs
+    "logs": "1285977835365994506" // ID du salon pour les logs
 };
 
 // Fonction pour envoyer des logs détaillés dans le salon de logs
