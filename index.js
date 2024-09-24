@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, Intents, MessageEmbed } = require('discord.js');
+const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
 const puppeteer = require('puppeteer');
 const winston = require('winston');
 
@@ -14,12 +14,17 @@ const logger = winston.createLogger({
     ),
     transports: [
         new winston.transports.Console(),
-        new winston.transports.File({ filename: 'bot_logs.log' })
+        new winston.transports.File({ filename: 'bot_logs.log' }) // Sauvegarde dans un fichier
     ]
 });
 
-// Initialiser le client Discord
-const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
+// Initialiser le client Discord avec les nouveaux intents
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages
+    ]
+});
 
 // Associer les catégories à l'ID des salons Discord
 const categoryChannels = {
@@ -33,7 +38,7 @@ const categoryChannels = {
     "bebe": "ID_SALON_BEBE",
     "bricolage": "ID_SALON_BRICOLAGE",
     "jardin": "ID_SALON_JARDIN",
-    "logs": "1285977835365994506"  // ID du salon pour les logs
+    "logs": "1285977835365994506" // ID du salon pour les logs
 };
 
 // Fonction pour envoyer des logs dans le salon de logs
