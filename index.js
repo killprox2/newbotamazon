@@ -3,22 +3,6 @@ const { Client, Intents, MessageEmbed } = require('discord.js');
 const puppeteer = require('puppeteer');
 const winston = require('winston');
 
-// Initialiser le client Discord
-const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
-
-const categories = {
-    "entretien": "Entretien",
-    "electronique": "Electronique",
-    "smartphone": "Smartphone",
-    "electromenager": "Electroménager",
-    "enfant": "Enfant",
-    "jouet": "Jouet",
-    "hygiene": "Hygiène",
-    "bebe": "Bébé",
-    "bricolage": "Bricolage",
-    "jardin": "Jardin"
-};
-
 // Configurer winston pour les logs
 const logger = winston.createLogger({
     level: 'info',
@@ -34,9 +18,27 @@ const logger = winston.createLogger({
     ]
 });
 
-// Fonction pour envoyer des logs dans le salon "logs"
+// Initialiser le client Discord
+const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
+
+// Associer les catégories à l'ID des salons Discord
+const categoryChannels = {
+    "entretien": "ID_SALON_ENTRETIEN",
+    "electronique": "ID_SALON_ELECTRONIQUE",
+    "smartphone": "ID_SALON_SMARTPHONE",
+    "electromenager": "ID_SALON_ELECTROMENAGER",
+    "enfant": "ID_SALON_ENFANT",
+    "jouet": "ID_SALON_JOUET",
+    "hygiene": "ID_SALON_HYGIENE",
+    "bebe": "ID_SALON_BEBE",
+    "bricolage": "ID_SALON_BRICOLAGE",
+    "jardin": "ID_SALON_JARDIN",
+    "logs": "1285977835365994506"  // ID du salon pour les logs
+};
+
+// Fonction pour envoyer des logs dans le salon de logs
 async function sendLogToChannel(logMessage) {
-    const logChannel = client.channels.cache.find(channel => channel.name === 'logs');
+    const logChannel = client.channels.cache.get(categoryChannels.logs);
     if (logChannel) {
         logChannel.send(logMessage);
     } else {
@@ -50,7 +52,7 @@ client.once('ready', () => {
     startScraping(); // Lancer le scraping dès que le bot est prêt
 });
 
-async function scrapeAmazon(category, channel) {
+async function scrapeAmazon(category, channelID) {
     logger.info(`Scraping démarré pour la catégorie ${category}.`);
     sendLogToChannel(`Scraping démarré pour la catégorie **${category}**.`);
 
@@ -108,18 +110,18 @@ async function scrapeAmazon(category, channel) {
 
     if (products.length > 0) {
         const embed = new MessageEmbed()
-            .setTitle(`Produits avec réduction dans la catégorie ${categories[channel]}`)
+            .setTitle(`Produits avec réduction dans la catégorie ${category}`)
             .setColor('#ff9900')
             .setDescription(products.map(p => `**${p.title}**\nAncien prix: ${p.oldPrice}€, Nouveau prix: ${p.newPrice}€, Réduction: ${p.discount}%\n[Lien](${p.link})`).join('\n\n'));
 
-        const discordChannel = client.channels.cache.find(ch => ch.name === channel);
+        const discordChannel = client.channels.cache.get(channelID);
         if (discordChannel) {
             discordChannel.send({ embeds: [embed] });
-            logger.info(`Produits envoyés dans le salon ${channel}.`);
-            sendLogToChannel(`Produits envoyés dans le salon **${channel}**.`);
+            logger.info(`Produits envoyés dans le salon ${category}.`);
+            sendLogToChannel(`Produits envoyés dans le salon **${category}**.`);
         } else {
-            logger.warn(`Le salon ${channel} n'a pas été trouvé.`);
-            sendLogToChannel(`Le salon **${channel}** n'a pas été trouvé.`);
+            logger.warn(`Le salon avec l'ID ${channelID} n'a pas été trouvé.`);
+            sendLogToChannel(`Le salon avec l'ID **${channelID}** n'a pas été trouvé.`);
         }
     } else {
         logger.warn(`Aucun produit avec réduction trouvé pour la catégorie ${category}.`);
@@ -128,10 +130,12 @@ async function scrapeAmazon(category, channel) {
 }
 
 async function startScraping() {
-    for (const [channel, category] of Object.entries(categories)) {
-        logger.info(`Démarrage du scraping pour la catégorie ${category}.`);
-        sendLogToChannel(`Démarrage du scraping pour la catégorie **${category}**.`);
-        await scrapeAmazon(category, channel);
+    for (const [category, channelID] of Object.entries(categoryChannels)) {
+        if (category !== "logs") {
+            logger.info(`Démarrage du scraping pour la catégorie ${category}.`);
+            sendLogToChannel(`Démarrage du scraping pour la catégorie **${category}**.`);
+            await scrapeAmazon(category, channelID);
+        }
     }
 }
 
