@@ -1,3 +1,5 @@
+require('dotenv').config(); // Charger les variables d'environnement
+
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
@@ -51,6 +53,34 @@ async function sendLogToChannel(logMessage) {
     }
 }
 
+// Fonction pour effectuer une requête avec des réessais en cas d'échec
+async function axiosGetWithRetry(url, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
+                    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'DNT': '1',
+                    'Upgrade-Insecure-Requests': '1',
+                    'TE': 'Trailers'
+                }
+            });
+            return response;
+        } catch (error) {
+            if (attempt < retries) {
+                logger.warn(`Erreur lors de la tentative ${attempt}, nouvelle tentative dans 5 secondes...`);
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Attendre 5 secondes avant de réessayer
+            } else {
+                logger.error(`Erreur après ${retries} tentatives : ${error.message}`);
+                throw error;
+            }
+        }
+    }
+}
+
 // Scraping avec Cheerio et Axios
 async function scrapeAmazon(category, channelID) {
     logger.info(`Scraping démarré pour la catégorie ${category}.`);
@@ -62,17 +92,8 @@ async function scrapeAmazon(category, channelID) {
         sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}** : [Lien](${url})`);
 
         try {
-            const { data } = await axios.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
-                    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'DNT': '1', // Ne pas me suivre
-                    'Upgrade-Insecure-Requests': '1',
-                    'TE': 'Trailers'
-                }
-            });
+            // Utilisation de la fonction axiosGetWithRetry pour gérer les réessais
+            const { data } = await axiosGetWithRetry(url);
 
             const $ = cheerio.load(data);
             let products = [];
@@ -123,10 +144,9 @@ async function scrapeAmazon(category, channelID) {
         }
 
         // Délai pour éviter une surcharge
-        await new Promise(resolve => setTimeout(resolve, 60000)); // Augmente le délai
+        await new Promise(resolve => setTimeout(resolve, 60000)); // Augmente le délai à 60 secondes entre chaque requête
     }
 }
-
 
 // Démarrage du scraping
 async function startScraping() {
@@ -138,5 +158,11 @@ async function startScraping() {
         }
     }
 }
+
+client.once('ready', () => {
+    logger.info('Bot is ready!');
+    sendLogToChannel('⚙️ Le bot a démarré et est prêt à scraper.');
+    startScraping(); // Lancer le scraping dès que le bot est prêt
+});
 
 client.login(process.env.TOKEN);
