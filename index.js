@@ -51,8 +51,8 @@ const client = new Client({
 
 // Associer les catégories à l'ID des salons Discord
 const categoryChannels = {
-    "entretien": "ID_SALON_ENTRETIEN",
-    "logs": "ID_SALON_LOGS" // Remplace avec l'ID du salon de logs
+    "entretien": "1255863140974071893",
+    "logs": "1285977835365994506" // Remplace avec l'ID du salon de logs
 };
 
 // Fonction pour envoyer des logs dans le salon de logs
