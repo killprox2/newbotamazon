@@ -142,10 +142,19 @@ async function scrapeAmazon(category, channelID) {
             }
 
         } catch (error) {
-            logger.error(`Erreur lors de l'accès à la page ${i} pour la catégorie ${category}: ${error.message}`);
-            sendLogToChannel(`⚠️ Erreur lors de l'accès à la page **${i}** pour la catégorie **${category}**: ${error.message}`);
-            continue; // Passe à la page suivante en cas d'erreur
-        }
+    if (error.response) {
+        logger.error(`Erreur lors de l'accès à la page ${i} pour la catégorie ${category}: Statut ${error.response.status} - ${error.response.data}`);
+        sendLogToChannel(`⚠️ Erreur lors de l'accès à la page **${i}** pour la catégorie **${category}**: Statut ${error.response.status} - ${error.response.data}`);
+    } else if (error.request) {
+        logger.error(`Aucune réponse reçue de ScraperAPI pour la page ${i} de la catégorie ${category}`);
+        sendLogToChannel(`⚠️ Aucune réponse reçue de ScraperAPI pour la page **${i}** de la catégorie **${category}**.`);
+    } else {
+        logger.error(`Erreur lors de la requête pour la page ${i} de la catégorie ${category}: ${error.message}`);
+        sendLogToChannel(`⚠️ Erreur lors de la requête pour la page **${i}** de la catégorie **${category}**: ${error.message}`);
+    }
+    continue; // Passe à la page suivante en cas d'erreur
+}
+
 
         // Délai pour éviter une surcharge
         await new Promise(resolve => setTimeout(resolve, 60000)); // Augmente le délai à 60 secondes entre chaque requête
