@@ -1,5 +1,3 @@
-require('dotenv').config(); // Charger les variables d'environnement
-
 const request = require('request-promise');
 const cheerio = require('cheerio');
 const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
