@@ -64,26 +64,25 @@ async function scrapeWithScraperAPI(url) {
 
     try {
         const response = await axios.get(fullUrl);
-        console.log("En-têtes de réponse:", response.headers); // Log des en-têtes
-        console.log("Réponse reçue de ScraperAPI:", response.data); // Log de la réponse
+        if (response.data.error) {
+            throw new Error(`Erreur ScraperAPI: ${response.data.error}`);
+        }
         return response.data;
     } catch (error) {
         if (error.response) {
-            // Problèmes avec ScraperAPI (ex: clé incorrecte, limites atteintes)
             logger.error(`Erreur lors de la requête ScraperAPI (Statut ${error.response.status}) : ${error.response.data}`);
             sendLogToChannel(`⚠️ Erreur lors de la requête ScraperAPI (Statut ${error.response.status}) : ${error.response.data}`);
         } else if (error.request) {
-            // Aucun retour de ScraperAPI
             logger.error('Aucune réponse reçue de ScraperAPI.');
             sendLogToChannel('⚠️ Aucune réponse reçue de ScraperAPI.');
         } else {
-            // Erreur lors de la configuration de la requête
             logger.error(`Erreur lors de la configuration de la requête : ${error.message}`);
             sendLogToChannel(`⚠️ Erreur lors de la configuration de la requête : ${error.message}`);
         }
         throw error;
     }
 }
+
 
 // Scraping avec Cheerio et ScraperAPI
 async function scrapeAmazon(category, channelID) {
