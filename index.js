@@ -1,9 +1,31 @@
-require('dotenv').config(); // Charger les variables d'environnement
-
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const winston = require('winston');
+
+// Liste de proxys gratuits (remplace avec une liste mise à jour régulièrement)
+const proxies = [
+    'http://12.34.56.78:8080',
+    'http://23.45.67.89:8080',
+    // Ajoute autant de proxys que possible
+];
+
+// Fonction pour obtenir un proxy aléatoire
+function getRandomProxy() {
+    return proxies[Math.floor(Math.random() * proxies.length)];
+}
+
+// Liste des user-agents pour simuler différents navigateurs
+const userAgents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.2 Safari/605.1.15',
+    // Ajoute plus de user-agents ici
+];
+
+// Fonction pour obtenir un user-agent aléatoire
+function getRandomUserAgent() {
+    return userAgents[Math.floor(Math.random() * userAgents.length)];
+}
 
 // Configurer les logs avec Winston
 const logger = winston.createLogger({
@@ -20,7 +42,6 @@ const logger = winston.createLogger({
     ]
 });
 
-// Initialiser le client Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -31,16 +52,7 @@ const client = new Client({
 // Associer les catégories à l'ID des salons Discord
 const categoryChannels = {
     "entretien": "ID_SALON_ENTRETIEN",
-    "electronique": "ID_SALON_ELECTRONIQUE",
-    "smartphone": "ID_SALON_SMARTPHONE",
-    "electromenager": "ID_SALON_ELECTROMENAGER",
-    "enfant": "ID_SALON_ENFANT",
-    "jouet": "ID_SALON_JOUET",
-    "hygiene": "ID_SALON_HYGIENE",
-    "bebe": "ID_SALON_BEBE",
-    "bricolage": "ID_SALON_BRICOLAGE",
-    "jardin": "ID_SALON_JARDIN",
-    "logs": "1285977835365994506" // Remplace avec l'ID du salon de logs
+    "logs": "ID_SALON_LOGS" // Remplace avec l'ID du salon de logs
 };
 
 // Fonction pour envoyer des logs dans le salon de logs
@@ -53,20 +65,27 @@ async function sendLogToChannel(logMessage) {
     }
 }
 
-// Scraping avec Axios et Cheerio
+// Scraping avec rotation des proxies et user-agents
 async function scrapeAmazon(category, channelID) {
     logger.info(`Scraping démarré pour la catégorie ${category}.`);
     sendLogToChannel(`📄 Scraping démarré pour la catégorie **${category}**.`);
 
     for (let i = 1; i <= 5; i++) {  // Limité à 5 pages pour tester
         const url = `https://www.amazon.fr/s?k=${category}&page=${i}`;
-        logger.info(`Accès à la page ${i} pour la catégorie ${category} : ${url}`);
-        sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}** : [Lien](${url})`);
+        const proxy = getRandomProxy();  // Choisir un proxy aléatoire
+        const userAgent = getRandomUserAgent();  // Choisir un user-agent aléatoire
+
+        logger.info(`Accès à la page ${i} pour la catégorie ${category} avec le proxy ${proxy}.`);
+        sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}**.`);
 
         try {
             const { data } = await axios.get(url, {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+                    'User-Agent': userAgent
+                },
+                proxy: {
+                    host: proxy.split(':')[1].replace('//', ''),  // Format du proxy
+                    port: parseInt(proxy.split(':')[2])
                 }
             });
 
@@ -118,8 +137,9 @@ async function scrapeAmazon(category, channelID) {
             continue;  // Passe à la page suivante en cas d'erreur
         }
 
-        // Délai pour éviter une surcharge
-        await new Promise(resolve => setTimeout(resolve, 30000));  // Attente de 30 secondes entre chaque requête
+        // Délai aléatoire pour éviter une surcharge
+        const delay = Math.floor(Math.random() * (60000 - 30000 + 1)) + 30000;  // Délai aléatoire entre 30 et 60 secondes
+        await new Promise(resolve => setTimeout(resolve, delay));
     }
 }
 
