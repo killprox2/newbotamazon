@@ -1,9 +1,9 @@
-require('dotenv').config();
+const axios = require('axios');
+const cheerio = require('cheerio');
 const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
-const puppeteer = require('puppeteer');
 const winston = require('winston');
 
-// Configurer winston pour les logs
+// Configurer les logs
 const logger = winston.createLogger({
     level: 'info',
     format: winston.format.combine(
@@ -14,11 +14,11 @@ const logger = winston.createLogger({
     ),
     transports: [
         new winston.transports.Console(),
-        new winston.transports.File({ filename: 'bot_logs.log' }) // Sauvegarde dans un fichier
+        new winston.transports.File({ filename: 'bot_logs.log' })
     ]
 });
 
-// Initialiser le client Discord avec les nouveaux intents
+// Initialiser le client Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -51,47 +51,37 @@ async function sendLogToChannel(logMessage) {
     }
 }
 
-client.once('ready', () => {
-    logger.info('Bot is ready!');
-    sendLogToChannel('Le bot a démarré et est prêt à scraper.');
-    startScraping(); // Lancer le scraping dès que le bot est prêt
-});
-
+// Scraping avec Cheerio et Axios
 async function scrapeAmazon(category, channelID) {
     logger.info(`Scraping démarré pour la catégorie ${category}.`);
     sendLogToChannel(`Scraping démarré pour la catégorie **${category}**.`);
-
-    const browser = await puppeteer.launch({ headless: true });
-    const page = await browser.newPage();
-    
-    let products = [];
 
     for (let i = 1; i <= 50; i++) {
         const url = `https://www.amazon.fr/s?k=${category}&page=${i}`;
         logger.info(`Accès à la page ${i} pour la catégorie ${category} : ${url}`);
         sendLogToChannel(`Accès à la page ${i} pour la catégorie **${category}** : ${url}`);
-        
-        await page.goto(url, { waitUntil: 'networkidle2' });
-        
-        const itemsOnPage = await page.evaluate(() => {
-            let items = [];
-            let productElements = document.querySelectorAll('.s-main-slot .s-result-item');
 
-            productElements.forEach(product => {
-                const title = product.querySelector('h2 a span')?.innerText;
-                const link = product.querySelector('h2 a')?.href;
-                const priceOld = product.querySelector('.a-price.a-text-price span')?.innerText;
-                const priceNew = product.querySelector('.a-price .a-offscreen')?.innerText;
+        try {
+            const { data } = await axios.get(url);
+            const $ = cheerio.load(data);
+
+            let products = [];
+
+            $('.s-main-slot .s-result-item').each((index, element) => {
+                const title = $(element).find('h2 a span').text();
+                const link = $(element).find('h2 a').attr('href');
+                const priceOld = $(element).find('.a-price.a-text-price span').text();
+                const priceNew = $(element).find('.a-price .a-offscreen').text();
 
                 if (title && link && priceOld && priceNew) {
-                    let oldPrice = parseFloat(priceOld.replace(/[^\d,.-]/g, '').replace(',', '.'));
-                    let newPrice = parseFloat(priceNew.replace(/[^\d,.-]/g, '').replace(',', '.'));
-                    let discount = ((oldPrice - newPrice) / oldPrice) * 100;
-                    
+                    const oldPrice = parseFloat(priceOld.replace(/[^\d,.-]/g, '').replace(',', '.'));
+                    const newPrice = parseFloat(priceNew.replace(/[^\d,.-]/g, '').replace(',', '.'));
+                    const discount = ((oldPrice - newPrice) / oldPrice) * 100;
+
                     if (discount >= 40) {
-                        items.push({
+                        products.push({
                             title: title,
-                            link: link,
+                            link: `https://www.amazon.fr${link}`,
                             oldPrice: oldPrice,
                             newPrice: newPrice,
                             discount: discount.toFixed(2)
@@ -99,41 +89,33 @@ async function scrapeAmazon(category, channelID) {
                     }
                 }
             });
-            return items;
-        });
 
-        logger.info(`Page ${i} de la catégorie ${category} traitée. ${itemsOnPage.length} produits trouvés avec réduction.`);
-        sendLogToChannel(`Page ${i} de la catégorie **${category}** traitée. **${itemsOnPage.length}** produits trouvés avec réduction.`);
-        
-        products = products.concat(itemsOnPage);
-        
-        // Délai aléatoire pour éviter la détection du bot
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 5000 + 3000));
-    }
+            if (products.length > 0) {
+                const embed = new MessageEmbed()
+                    .setTitle(`Produits avec réduction dans la catégorie ${category}`)
+                    .setColor('#ff9900')
+                    .setDescription(products.map(p => `**${p.title}**\nAncien prix: ${p.oldPrice}€, Nouveau prix: ${p.newPrice}€, Réduction: ${p.discount}%\n[Lien](${p.link})`).join('\n\n'));
 
-    await browser.close();
+                const discordChannel = client.channels.cache.get(channelID);
+                if (discordChannel) {
+                    discordChannel.send({ embeds: [embed] });
+                    logger.info(`Produits envoyés dans le salon ${category}.`);
+                    sendLogToChannel(`Produits envoyés dans le salon **${category}**.`);
+                }
+            }
 
-    if (products.length > 0) {
-        const embed = new MessageEmbed()
-            .setTitle(`Produits avec réduction dans la catégorie ${category}`)
-            .setColor('#ff9900')
-            .setDescription(products.map(p => `**${p.title}**\nAncien prix: ${p.oldPrice}€, Nouveau prix: ${p.newPrice}€, Réduction: ${p.discount}%\n[Lien](${p.link})`).join('\n\n'));
-
-        const discordChannel = client.channels.cache.get(channelID);
-        if (discordChannel) {
-            discordChannel.send({ embeds: [embed] });
-            logger.info(`Produits envoyés dans le salon ${category}.`);
-            sendLogToChannel(`Produits envoyés dans le salon **${category}**.`);
-        } else {
-            logger.warn(`Le salon avec l'ID ${channelID} n'a pas été trouvé.`);
-            sendLogToChannel(`Le salon avec l'ID **${channelID}** n'a pas été trouvé.`);
+        } catch (error) {
+            logger.error(`Erreur lors de l'accès à la page ${i} pour la catégorie ${category}: ${error.message}`);
+            sendLogToChannel(`Erreur lors de l'accès à la page **${i}** pour la catégorie **${category}**: ${error.message}`);
+            continue; // Passe à la page suivante en cas d'erreur
         }
-    } else {
-        logger.warn(`Aucun produit avec réduction trouvé pour la catégorie ${category}.`);
-        sendLogToChannel(`Aucun produit avec réduction trouvé pour la catégorie **${category}**.`);
+
+        // Délai pour éviter une surcharge
+        await new Promise(resolve => setTimeout(resolve, 3000)); 
     }
 }
 
+// Démarrage du scraping
 async function startScraping() {
     for (const [category, channelID] of Object.entries(categoryChannels)) {
         if (category !== "logs") {
