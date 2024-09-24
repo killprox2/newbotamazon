@@ -1,10 +1,9 @@
-require('dotenv').config();
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { Client, GatewayIntentBits, MessageEmbed } = require('discord.js');
 const winston = require('winston');
 
-// Configurer les logs avec Winston
+// Configurer les logs
 const logger = winston.createLogger({
     level: 'info',
     format: winston.format.combine(
@@ -15,7 +14,7 @@ const logger = winston.createLogger({
     ),
     transports: [
         new winston.transports.Console(),
-        new winston.transports.File({ filename: 'bot_logs.log' }) // Sauvegarde des logs dans un fichier
+        new winston.transports.File({ filename: 'bot_logs.log' })
     ]
 });
 
@@ -42,7 +41,7 @@ const categoryChannels = {
     "logs": "1285977835365994506" // ID du salon pour les logs
 };
 
-// Fonction pour envoyer des logs détaillés dans le salon de logs
+// Fonction pour envoyer des logs dans le salon de logs
 async function sendLogToChannel(logMessage) {
     const logChannel = client.channels.cache.get(categoryChannels.logs);
     if (logChannel) {
@@ -63,9 +62,19 @@ async function scrapeAmazon(category, channelID) {
         sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}** : [Lien](${url})`);
 
         try {
-            const { data } = await axios.get(url);
-            const $ = cheerio.load(data);
+            const { data } = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
+                    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'DNT': '1', // Ne pas me suivre
+                    'Upgrade-Insecure-Requests': '1',
+                    'TE': 'Trailers'
+                }
+            });
 
+            const $ = cheerio.load(data);
             let products = [];
 
             $('.s-main-slot .s-result-item').each((index, element) => {
@@ -114,25 +123,20 @@ async function scrapeAmazon(category, channelID) {
         }
 
         // Délai pour éviter une surcharge
-        await new Promise(resolve => setTimeout(resolve, 3000)); 
+        await new Promise(resolve => setTimeout(resolve, 60000)); // Augmente le délai
     }
 }
+
 
 // Démarrage du scraping
 async function startScraping() {
     for (const [category, channelID] of Object.entries(categoryChannels)) {
         if (category !== "logs") {
             logger.info(`Démarrage du scraping pour la catégorie ${category}.`);
-            sendLogToChannel(`🚀 Démarrage du scraping pour la catégorie **${category}**.`);
+            sendLogToChannel(`Démarrage du scraping pour la catégorie **${category}**.`);
             await scrapeAmazon(category, channelID);
         }
     }
 }
-
-client.once('ready', () => {
-    logger.info('Bot is ready!');
-    sendLogToChannel('⚙️ Le bot a démarré et est prêt à scraper.');
-    startScraping(); // Lancer le scraping dès que le bot est prêt
-});
 
 client.login(process.env.TOKEN);
