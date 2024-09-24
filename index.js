@@ -53,7 +53,7 @@ async function sendLogToChannel(logMessage) {
     }
 }
 
-// Fonction pour faire une requête avec ScraperAPI
+// Fonction pour faire une requête avec ScraperAPI et ajouter un User-Agent
 async function scrapeWithScraperAPI(url) {
     const apiKey = process.env.SCRAPER_API_KEY;
     if (!apiKey) {
@@ -63,7 +63,11 @@ async function scrapeWithScraperAPI(url) {
     const fullUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(url)}`;
 
     try {
-        const response = await axios.get(fullUrl);
+        const response = await axios.get(fullUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
+            }
+        });
         if (response.data.error) {
             throw new Error(`Erreur ScraperAPI: ${response.data.error}`);
         }
@@ -94,7 +98,7 @@ async function scrapeAmazon(category, channelID) {
         sendLogToChannel(`🔍 Accès à la page **${i}** pour la catégorie **${category}** : [Lien](${url})`);
 
         try {
-            // Utilisation de ScraperAPI avec Axios
+            // Utilisation de ScraperAPI avec Axios et User-Agent
             const data = await scrapeWithScraperAPI(url);
 
             const $ = cheerio.load(data);
@@ -154,7 +158,7 @@ async function scrapeAmazon(category, channelID) {
         }
 
         // Délai pour éviter une surcharge
-        await new Promise(resolve => setTimeout(resolve, 60000)); // Augmente le délai à 60 secondes entre chaque requête
+        await new Promise(resolve => setTimeout(resolve, 90000)); // Augmente le délai à 90 secondes entre chaque requête
     }
 }
 
