@@ -56,7 +56,11 @@ async function sendLogToChannel(logMessage) {
 // Fonction pour faire une requête avec ScraperAPI
 async function scrapeWithScraperAPI(url) {
     const apiKey = process.env.SCRAPER_API_KEY;
-    const fullUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${url}`;
+    if (!apiKey) {
+        throw new Error('La clé ScraperAPI n\'est pas définie dans les variables d\'environnement');
+    }
+
+    const fullUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(url)}`;
 
     try {
         const response = await axios.get(fullUrl);
@@ -64,8 +68,19 @@ async function scrapeWithScraperAPI(url) {
         console.log("Réponse reçue de ScraperAPI:", response.data); // Log de la réponse
         return response.data;
     } catch (error) {
-        logger.error(`Erreur lors de la requête ScraperAPI : ${error.message}`);
-        sendLogToChannel(`⚠️ Erreur lors de la requête ScraperAPI : ${error.message}`);
+        if (error.response) {
+            // Problèmes avec ScraperAPI (ex: clé incorrecte, limites atteintes)
+            logger.error(`Erreur lors de la requête ScraperAPI (Statut ${error.response.status}) : ${error.response.data}`);
+            sendLogToChannel(`⚠️ Erreur lors de la requête ScraperAPI (Statut ${error.response.status}) : ${error.response.data}`);
+        } else if (error.request) {
+            // Aucun retour de ScraperAPI
+            logger.error('Aucune réponse reçue de ScraperAPI.');
+            sendLogToChannel('⚠️ Aucune réponse reçue de ScraperAPI.');
+        } else {
+            // Erreur lors de la configuration de la requête
+            logger.error(`Erreur lors de la configuration de la requête : ${error.message}`);
+            sendLogToChannel(`⚠️ Erreur lors de la configuration de la requête : ${error.message}`);
+        }
         throw error;
     }
 }
