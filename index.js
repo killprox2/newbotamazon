@@ -70,7 +70,7 @@ async function fetchDealsFromScraperAPI(searchQuery, channelID) {
             params: {
                 api_key: process.env.SCRAPER_API_KEY, // Remplace par ta clé ScraperAPI
                 query: searchQuery,
-                domain: 'amazon.fr' // Spécifie que la recherche doit se faire sur Amazon France
+                domain: 'fr' // Spécifie que la recherche doit se faire sur Amazon France
             }
         });
 
