@@ -14,7 +14,7 @@ const channels = {
 };
 
 // Liste des catégories à rechercher
-const categories = ['entretien', 'smartphone gaming', 'jouet', 'enfant', 'jardin', 'bricolage', 'électronique', 'électroménager'];
+const categories = ['entretien', 'smartphone', 'gaming', 'jouet', 'enfant', 'jardin', 'bricolage', 'électronique', 'électroménager', 'all', 'pas cher', '1euro'];
 
 // Fonction pour envoyer des messages dans le salon de logs
 function sendLogMessage(content) {
