@@ -1,183 +1,283 @@
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const axios = require('axios');
-const cheerio = require('cheerio');
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const winston = require('winston');
-
-// Liste étendue de proxys gratuits (mets à jour régulièrement avec des proxys en ligne)
-const proxies = [
-    'http://12.34.56.78:8080',
-    'http://23.45.67.89:8080',
-    'http://34.56.78.90:3128',
-    'http://45.67.89.12:8080',
-    'http://56.78.90.23:3128',
-    'http://67.89.12.34:8080',
-    'http://78.90.23.45:3128',
-    'http://89.12.34.56:8080',
-    'http://90.23.45.67:3128'
-    // Ajoute autant de proxys que possible
-];
-
-// Fonction pour obtenir un proxy aléatoire
-function getRandomProxy() {
-    return proxies[Math.floor(Math.random() * proxies.length)];
-}
-
-// Liste étendue des super User-Agents pour simuler différents navigateurs et plateformes
-const userAgents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.2 Safari/605.1.15',
-    'Mozilla/5.0 (Linux; Android 9; Pixel 3 XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.101 Mobile Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0',
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1',
-    'Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1'
-];
-
-// Fonction pour obtenir un User-Agent aléatoire
-function getRandomUserAgent() {
-    return userAgents[Math.floor(Math.random() * userAgents.length)];
-}
-
-// Configurer les logs avec Winston
-const logger = winston.createLogger({
-    level: 'info',
-    format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.printf(({ timestamp, level, message }) => {
-            return `${timestamp} [${level.toUpperCase()}] - ${message}`;
-        })
-    ),
-    transports: [
-        new winston.transports.Console(),
-        new winston.transports.File({ filename: 'bot_logs.log' })
-    ]
-});
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages
-    ]
-});
-
-// Associer les catégories à l'ID des salons Discord
-const categoryChannels = {
-    "entretien": "ID_SALON_ENTRETIEN",
-    "logs": "ID_SALON_LOGS" // Remplace avec l'ID du salon de logs
-};
-
-// Fonction pour envoyer des logs dans le salon de logs
-async function sendLogToChannel(logMessage) {
-    const logChannel = client.channels.cache.get(categoryChannels.logs);
-    if (logChannel) {
-        logChannel.send(logMessage);
-    } else {
-        console.error('Le salon "logs" n\'a pas été trouvé.');
-    }
-}
-
-// Scraping avec gestion des erreurs de proxy
-async function scrapeAmazon(category, channelID) {
-    logger.info(`Scraping démarré pour la catégorie ${category}.`);
-    sendLogToChannel(`📄 Scraping démarré pour la catégorie **${category}**.`);
-
-    for (let i = 1; i <= 10; i++) {  // Limité à 10 pages pour éviter un nombre excessif de requêtes
-        const url = `https://www.amazon.fr/s?k=${category}&page=${i}`;
-
-        let success = false;  // Indicateur de succès de la requête
-        let attempts = 0;
-        const maxAttempts = 5;  // Maximum de tentatives pour chaque page
-
-        while (!success && attempts < maxAttempts) {
-            const proxy = getRandomProxy();  // Choisir un proxy aléatoire
-            const userAgent = getRandomUserAgent();  // Choisir un user-agent aléatoire
-
-            logger.info(`Tentative ${attempts + 1}: Accès à la page ${i} pour la catégorie ${category} avec le proxy ${proxy}.`);
-            sendLogToChannel(`🔍 Tentative ${attempts + 1}: Accès à la page **${i}** pour la catégorie **${category}** avec le proxy ${proxy}.`);
-
-            try {
-                const { data } = await axios.get(url, {
-                    headers: {
-                        'User-Agent': userAgent
-                    },
-                    proxy: {
-                        host: proxy.split(':')[1].replace('//', ''),  // Format du proxy
-                        port: parseInt(proxy.split(':')[2])
-                    },
-                    timeout: 5000  // Délai limite pour éviter une longue attente
-                });
-
-                const $ = cheerio.load(data);
-                let products = [];
-
-                $('.s-main-slot .s-result-item').each((index, element) => {
-                    const title = $(element).find('h2 a span').text();
-                    const link = $(element).find('h2 a').attr('href');
-                    const priceOld = $(element).find('.a-price.a-text-price span').text();
-                    const priceNew = $(element).find('.a-price .a-offscreen').text();
-
-                    if (title && link && priceOld && priceNew) {
-                        const oldPrice = parseFloat(priceOld.replace(/[^\d,.-]/g, '').replace(',', '.'));
-                        const newPrice = parseFloat(priceNew.replace(/[^\d,.-]/g, '').replace(',', '.'));
-                        const discount = ((oldPrice - newPrice) / oldPrice) * 100;
-
-                        if (discount >= 50) {
-                            products.push({
-                                title: title,
-                                link: `https://www.amazon.fr${link}`,
-                                oldPrice: oldPrice,
-                                newPrice: newPrice,
-                                discount: discount.toFixed(2)
-                            });
-                        }
-                    }
-                });
-
-                if (products.length > 0) {
-                    const embed = new EmbedBuilder()
-                        .setTitle(`Produits avec réduction dans la catégorie ${category}`)
-                        .setColor('#ff9900')
-                        .setDescription(products.map(p => `**${p.title}**\nAncien prix: ${p.oldPrice}€, Nouveau prix: ${p.newPrice}€, Réduction: ${p.discount}%\n[Lien](${p.link})`).join('\n\n'));
-
-                    const discordChannel = client.channels.cache.get(channelID);
-                    if (discordChannel) {
-                        discordChannel.send({ embeds: [embed] });
-                        logger.info(`Produits envoyés dans le salon ${category}.`);
-                        sendLogToChannel(`✅ **${products.length} produits trouvés** dans la catégorie **${category}** ont été ajoutés au salon.`);
-                    }
-                } else {
-                    sendLogToChannel(`❌ Aucun produit trouvé sur la page **${i}** de la catégorie **${category}**.`);
-                }
-
-                success = true;  // Marquer comme succès si tout a fonctionné
-
-            } catch (error) {
-                attempts++;
-                logger.error(`Erreur lors de la requête pour la page ${i} de la catégorie ${category}: ${error.message}`);
-                sendLogToChannel(`⚠️ Erreur lors de la requête pour la page **${i}** de la catégorie **${category}** avec le proxy **${proxy}**: ${error.message}`);
-            }
-
-            // Délai pour éviter une surcharge
-            await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 30000) + 30000));  // 30-60 secondes de délai aléatoire
-        }
-    }
-}
-
-// Démarrage du scraping
-async function startScraping() {
-    for (const [category, channelID] of Object.entries(categoryChannels)) {
-        if (category !== "logs") {
-            logger.info(`Démarrage du scraping pour la catégorie ${category}.`);
-            sendLogToChannel(`Démarrage du scraping pour la catégorie **${category}**.`);
-            await scrapeAmazon(category, channelID);
-        }
-    }
-}
-
-client.once('ready', () => {
-    logger.info('Bot is ready!');
-    sendLogToChannel('⚙️ Le bot a démarré et est prêt à scraper.');
-    startScraping();  // Lancer le scraping dès que le bot est prêt
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
 });
 
 client.login(process.env.TOKEN);
+
+// Rôles et salons
+const roles = {
+    owner: 'OwnerRoleID',
+    modo: 'ModoRoleID',
+    preniumPlus: 'PreniumPlusRoleID',
+    prenium: 'PreniumRoleID',
+    visiteur: 'VisiteurRoleID',
+};
+
+const channels = {
+    amazon: '1255863140974071893',
+    cdiscount: '1285939619598172232',
+    auchan: '1285969661535453215',
+    manomano: '1285953900066902057',
+    electromenager: 'ElectromenagerChannelID',
+    livre: 'LivreChannelID',
+    enfant: 'EnfantChannelID',
+    jouet: 'JouetChannelID',
+    entretien: 'EntretienChannelID',
+    electronique: 'ElectroniqueChannelID',
+    deal: '1285955371252580352',
+    logs: '1285977835365994506', // ID du salon où les logs seront envoyés
+};
+
+// Fonction pour envoyer des messages dans le salon de logs
+function sendLogMessage(content) {
+    const logChannel = client.channels.cache.get(channels.logs);
+    if (logChannel) {
+        logChannel.send(content);
+    } else {
+        console.log('Salon de logs introuvable.');
+    }
+}
+
+// Logs au démarrage du bot
+client.once('ready', () => {
+    console.log('Bot is online!');
+    sendLogMessage('✅ Bot démarré et prêt à l\'emploi.');
+});
+
+// Commande *updaterole*
+client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('*updaterole')) {
+        const [command, username, roleName] = message.content.split(' ');
+        const member = message.guild.members.cache.find(m => m.user.username === username);
+        const role = message.guild.roles.cache.find(r => r.name === roleName);
+
+        if (member && role) {
+            await member.roles.add(role);
+            message.channel.send(`${username} a reçu le rôle ${roleName}.`);
+            sendLogMessage(`🔄 Rôle mis à jour : ${username} a reçu le rôle ${roleName}.`);
+        } else {
+            message.channel.send("Utilisateur ou rôle introuvable.");
+            sendLogMessage('❌ Mise à jour du rôle échouée, utilisateur ou rôle introuvable.');
+        }
+    }
+});
+
+// Commande *ban*
+client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('*ban')) {
+        const [command, username] = message.content.split(' ');
+        const member = message.guild.members.cache.find(m => m.user.username === username);
+
+        if (member) {
+            await member.ban();
+            message.channel.send(`${username} a été banni.`);
+            sendLogMessage(`🔨 Utilisateur banni : ${username} par ${message.author.username}`);
+        } else {
+            message.channel.send("Utilisateur introuvable.");
+            sendLogMessage(`❌ Tentative de ban échouée pour ${username}`);
+        }
+    }
+});
+
+// Commande *mute*
+client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('*mute')) {
+        const [command, username, duration] = message.content.split(' ');
+        const member = message.guild.members.cache.find(m => m.user.username === username);
+
+        if (member) {
+            const mutedRole = message.guild.roles.cache.find(r => r.name === 'Muted');
+            await member.roles.add(mutedRole);
+            message.channel.send(`${username} est mute pour ${duration}.`);
+            sendLogMessage(`🔇 Utilisateur mute : ${username} pour ${duration}`);
+        } else {
+            message.channel.send("Utilisateur introuvable.");
+            sendLogMessage(`❌ Tentative de mute échouée pour ${username}`);
+        }
+    }
+});
+
+// Commande *bloque*
+client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('*bloque')) {
+        const [command, username] = message.content.split(' ');
+        const member = message.guild.members.cache.find(m => m.user.username === username);
+
+        if (member) {
+            // Logique pour bloquer les salons
+            message.channel.send(`${username} ne voit que le salon en attente.`);
+            sendLogMessage(`🔒 Accès bloqué pour ${username}, seul le salon en attente est visible.`);
+        } else {
+            message.channel.send("Utilisateur introuvable.");
+            sendLogMessage(`❌ Tentative de blocage échouée pour ${username}`);
+        }
+    }
+});
+
+// Commande *addmonitor* pour ajouter un produit spécial à surveiller
+client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('*addmonitor')) {
+        const [command, productLink, maxPrice] = message.content.split(' ');
+        // Stocker le produit à suivre (ici JSON ou DB)
+        message.channel.send(`Le produit ${productLink} sera suivi avec un prix maximum de ${maxPrice}€.`);
+        sendLogMessage(`🔍 Produit ajouté pour suivi : ${productLink} avec un prix maximum de ${maxPrice}€.`);
+    }
+});
+
+// Fonction de scraping Amazon
+async function checkAmazonDeals() {
+    try {
+        sendLogMessage('🔎 Recherche de deals Amazon...');
+        const response = await axios.get('https://www.amazon.fr/deals');
+        const deals = parseAmazonDeals(response.data); // Fonction pour parser les données
+
+        if (deals.length > 0) {
+            sendLogMessage(`📦 ${deals.length} deals trouvés sur Amazon.`);
+        } else {
+            sendLogMessage('❌ Aucun deal trouvé sur Amazon.');
+        }
+
+        deals.forEach(deal => {
+            const embed = new EmbedBuilder()
+                .setTitle(deal.title)
+                .setURL(deal.url)
+                .addFields(
+                    { name: 'Prix actuel', value: deal.currentPrice, inline: true },
+                    { name: 'Prix avant', value: deal.oldPrice, inline: true },
+                    { name: 'Réduction', value: `${deal.discount}%`, inline: true }
+                )
+                .setFooter({ text: 'Amazon Deal' });
+
+            client.channels.cache.get(channels.amazon).send({ embeds: [embed] });
+            sendLogMessage(`📌 Produit ajouté : ${deal.title} - ${deal.currentPrice}€ (réduction de ${deal.discount}%)`);
+        });
+    } catch (error) {
+        sendLogMessage('⚠️ Erreur lors de la recherche des deals Amazon.');
+        console.error('Erreur lors de la recherche des deals Amazon:', error);
+    }
+}
+
+// Fonction de scraping Cdiscount
+async function checkCdiscountDeals() {
+    try {
+        sendLogMessage('🔎 Recherche de deals Cdiscount...');
+        const response = await axios.get('https://www.cdiscount.com/');
+        const deals = parseCdiscountDeals(response.data); // Fonction pour parser les données
+
+        if (deals.length > 0) {
+            sendLogMessage(`📦 ${deals.length} deals trouvés sur Cdiscount.`);
+        } else {
+            sendLogMessage('❌ Aucun deal trouvé sur Cdiscount.');
+        }
+
+        deals.forEach(deal => {
+            const embed = new EmbedBuilder()
+                .setTitle(deal.title)
+                .setURL(deal.url)
+                .addFields(
+                    { name: 'Prix actuel', value: deal.currentPrice, inline: true },
+                    { name: 'Prix avant', value: deal.oldPrice, inline: true },
+                    { name: 'Réduction', value: `${deal.discount}%`, inline: true }
+                )
+                .setFooter({ text: 'Cdiscount Deal' });
+
+            client.channels.cache.get(channels.cdiscount).send({ embeds: [embed] });
+            sendLogMessage(`📌 Produit ajouté : ${deal.title} - ${deal.currentPrice}€ (réduction de ${deal.discount}%)`);
+        });
+    } catch (error) {
+        sendLogMessage('⚠️ Erreur lors de la recherche des deals Cdiscount.');
+        console.error('Erreur lors de la recherche des deals Cdiscount:', error);
+    }
+}
+
+// Fonction de scraping Auchan
+async function checkAuchanDeals() {
+    try {
+        sendLogMessage('🔎 Recherche de deals Auchan...');
+        const response = await axios.get('https://www.auchan.fr/');
+        const deals = parseAuchanDeals(response.data); // Fonction pour parser les données
+
+        if (deals.length > 0) {
+            sendLogMessage(`📦 ${deals.length} deals trouvés sur Auchan.`);
+        } else {
+            sendLogMessage('❌ Aucun deal trouvé sur Auchan.');
+        }
+
+        deals.forEach(deal => {
+            const embed = new EmbedBuilder()
+                .setTitle(deal.title)
+                .setURL(deal.url)
+                .addFields(
+                    { name: 'Prix actuel', value: deal.currentPrice, inline: true },
+                    { name: 'Prix avant', value: deal.oldPrice, inline: true },
+                    { name: 'Réduction', value: `${deal.discount}%`, inline: true }
+                )
+                .setFooter({ text: 'Auchan Deal' });
+
+            client.channels.cache.get(channels.auchan).send({ embeds: [embed] });
+            sendLogMessage(`📌 Produit ajouté : ${deal.title} - ${deal.currentPrice}€ (réduction de ${deal.discount}%)`);
+        });
+    } catch (error) {
+        sendLogMessage('⚠️ Erreur lors de la recherche des deals Auchan.');
+        console.error('Erreur lors de la recherche des deals Auchan:', error);
+    }
+}
+
+// Fonction de scraping Manomano
+async function checkManomanoDeals() {
+    try {
+        sendLogMessage('🔎 Recherche de deals Manomano...');
+        const response = await axios.get('https://www.manomano.fr/');
+        const deals = parseManomanoDeals(response.data); // Fonction pour parser les données
+
+        if (deals.length > 0) {
+            sendLogMessage(`📦 ${deals.length} deals trouvés sur Manomano.`);
+        } else {
+            sendLogMessage('❌ Aucun deal trouvé sur Manomano.');
+        }
+
+        deals.forEach(deal => {
+            const embed = new EmbedBuilder()
+                .setTitle(deal.title)
+                .setURL(deal.url)
+                .addFields(
+                    { name: 'Prix actuel', value: deal.currentPrice, inline: true },
+                    { name: 'Prix avant', value: deal.oldPrice, inline: true },
+                    { name: 'Réduction', value: `${deal.discount}%`, inline: true }
+                )
+                .setFooter({ text: 'Manomano Deal' });
+
+            client.channels.cache.get(channels.manomano).send({ embeds: [embed] });
+            sendLogMessage(`📌 Produit ajouté : ${deal.title} - ${deal.currentPrice}€ (réduction de ${deal.discount}%)`);
+        });
+    } catch (error) {
+        sendLogMessage('⚠️ Erreur lors de la recherche des deals Manomano.');
+        console.error('Erreur lors de la recherche des deals Manomano:', error);
+    }
+}
+
+// Planification des recherches (exécute toutes les heures)
+setInterval(() => {
+    sendLogMessage('🔄 Lancement de la recherche de deals Amazon...');
+    checkAmazonDeals();
+}, 3600000); // Toutes les heures
+
+setInterval(() => {
+    sendLogMessage('🔄 Lancement de la recherche de deals Cdiscount...');
+    checkCdiscountDeals();
+}, 3600000); // Toutes les heures
+
+setInterval(() => {
+    sendLogMessage('🔄 Lancement de la recherche de deals Auchan...');
+    checkAuchanDeals();
+}, 3600000); // Toutes les heures
+
+setInterval(() => {
+    sendLogMessage('🔄 Lancement de la recherche de deals Manomano...');
+    checkManomanoDeals();
+}, 3600000); // Toutes les heures
+
+
