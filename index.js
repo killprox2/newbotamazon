@@ -13,6 +13,9 @@ const channels = {
     logs: '1285977835365994506', // ID du salon où les logs seront envoyés
 };
 
+// Liste des catégories à rechercher
+const categories = ['entretien', 'smartphone gaming', 'jouet', 'enfant', 'jardin', 'bricolage', 'électronique', 'électroménager'];
+
 // Fonction pour envoyer des messages dans le salon de logs
 function sendLogMessage(content) {
     const logChannel = client.channels.cache.get(channels.logs);
@@ -28,9 +31,9 @@ client.once('ready', async () => {
     console.log('Bot is online!');
     sendLogMessage('✅ Bot démarré et prêt à l\'emploi.');
 
-    // Lancer la recherche des deals immédiatement au démarrage
-    sendLogMessage('🔄 Lancement immédiat de la recherche de deals Amazon...');
-    await checkAmazonDeals();
+    // Lancer la recherche des deals immédiatement au démarrage pour chaque catégorie
+    sendLogMessage('🔄 Lancement immédiat de la recherche de deals Amazon pour plusieurs catégories...');
+    await checkAmazonDealsForCategories();
 });
 
 // Fonction pour envoyer un produit en embed dans un salon Discord
@@ -47,7 +50,7 @@ async function sendProductEmbed(productData, channelID) {
             { name: 'Prime', value: productData.has_prime ? 'Oui' : 'Non', inline: true },
             { name: 'Amazon Choice', value: productData.is_amazon_choice ? 'Oui' : 'Non', inline: true }
         )
-        .setFooter({ text: 'Produit Amazon' });
+        .setFooter({ text: 'Produit Amazon France' });
 
     const discordChannel = client.channels.cache.get(channelID);
     if (discordChannel) {
@@ -58,15 +61,16 @@ async function sendProductEmbed(productData, channelID) {
     }
 }
 
-// Scraping avec ScraperAPI et filtre pour les réductions de 50% ou plus
+// Scraping avec ScraperAPI pour Amazon France et filtrage des réductions
 async function fetchDealsFromScraperAPI(searchQuery, channelID) {
     try {
-        sendLogMessage('🔎 Recherche de produits Amazon avec ScraperAPI...');
+        sendLogMessage(`🔎 Recherche de produits Amazon France pour la catégorie "${searchQuery}" avec ScraperAPI...`);
 
         const response = await axios.get('https://api.scraperapi.com/structured/amazon/search', {
             params: {
                 api_key: process.env.SCRAPER_API_KEY, // Remplace par ta clé ScraperAPI
-                query: searchQuery
+                query: searchQuery,
+                domain: 'amazon.fr' // Spécifie que la recherche doit se faire sur Amazon France
             }
         });
 
@@ -79,32 +83,36 @@ async function fetchDealsFromScraperAPI(searchQuery, channelID) {
                 const currentPrice = product.price;
                 const discount = ((originalPrice - currentPrice) / originalPrice) * 100;
 
-                return discount >= 50; // Filtre sur 50% de réduction ou plus
+                return discount >= 70; // Filtre sur 50% de réduction ou plus
             }
             return false;
         });
 
         if (filteredProducts && filteredProducts.length > 0) {
-            sendLogMessage(`📦 ${filteredProducts.length} produits avec réduction trouvés sur Amazon.`);
+            sendLogMessage(`📦 ${filteredProducts.length} produits trouvés dans la catégorie "${searchQuery}" sur Amazon France.`);
             filteredProducts.forEach(product => {
                 sendProductEmbed(product, channelID);
             });
         } else {
-            sendLogMessage('❌ Aucun produit avec réduction trouvés sur Amazon.');
+            sendLogMessage(`❌ Aucun produit avec réduction trouvé dans la catégorie "${searchQuery}" sur Amazon France.`);
         }
     } catch (error) {
-        console.error('Erreur lors de la récupération des produits sur Amazon:', error);
-        sendLogMessage('⚠️ Erreur lors de la recherche des produits sur Amazon.');
+        console.error(`Erreur lors de la récupération des produits pour la catégorie "${searchQuery}" sur Amazon France:`, error);
+        sendLogMessage(`⚠️ Erreur lors de la recherche des produits pour la catégorie "${searchQuery}" sur Amazon France.`);
     }
 }
 
-// Fonction de scraping Amazon via ScraperAPI
-async function checkAmazonDeals() {
-    await fetchDealsFromScraperAPI('laptop', channels.amazon); // Recherche de produits avec le mot-clé 'laptop'
+// Fonction de scraping Amazon France pour toutes les catégories via ScraperAPI
+async function checkAmazonDealsForCategories() {
+    for (const category of categories) {
+        await fetchDealsFromScraperAPI(category, channels.amazon);
+        // Attente de 5 secondes entre chaque catégorie pour éviter d'être bloqué
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
 }
 
-// Planification des recherches (exécute toutes les heures)
+// Planification des recherches pour chaque catégorie (exécute toutes les heures)
 setInterval(() => {
-    sendLogMessage('🔄 Lancement de la recherche de deals Amazon...');
-    checkAmazonDeals();
+    sendLogMessage('🔄 Lancement de la recherche de deals Amazon France pour toutes les catégories...');
+    checkAmazonDealsForCategories();
 }, 3600000); // Toutes les heures
