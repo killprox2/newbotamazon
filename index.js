@@ -58,7 +58,7 @@ async function sendProductEmbed(productData, channelID) {
     }
 }
 
-// Scraping avec ScraperAPI
+// Scraping avec ScraperAPI et filtre pour les réductions de 50% ou plus
 async function fetchDealsFromScraperAPI(searchQuery, channelID) {
     try {
         sendLogMessage('🔎 Recherche de produits Amazon avec ScraperAPI...');
@@ -72,13 +72,25 @@ async function fetchDealsFromScraperAPI(searchQuery, channelID) {
 
         const products = response.data.results; // Extraction des résultats de ScraperAPI
 
-        if (products && products.length > 0) {
-            sendLogMessage(`📦 ${products.length} produits trouvés sur Amazon.`);
-            products.forEach(product => {
+        // Filtrer les produits avec une réduction d'au moins 50%
+        const filteredProducts = products.filter(product => {
+            if (product.original_price && product.price) {
+                const originalPrice = product.original_price.price;
+                const currentPrice = product.price;
+                const discount = ((originalPrice - currentPrice) / originalPrice) * 100;
+
+                return discount >= 50; // Filtre sur 50% de réduction ou plus
+            }
+            return false;
+        });
+
+        if (filteredProducts && filteredProducts.length > 0) {
+            sendLogMessage(`📦 ${filteredProducts.length} produits avec réduction trouvés sur Amazon.`);
+            filteredProducts.forEach(product => {
                 sendProductEmbed(product, channelID);
             });
         } else {
-            sendLogMessage('❌ Aucun produit trouvé sur Amazon.');
+            sendLogMessage('❌ Aucun produit avec réduction trouvés sur Amazon.');
         }
     } catch (error) {
         console.error('Erreur lors de la récupération des produits sur Amazon:', error);
@@ -88,7 +100,7 @@ async function fetchDealsFromScraperAPI(searchQuery, channelID) {
 
 // Fonction de scraping Amazon via ScraperAPI
 async function checkAmazonDeals() {
-    await fetchDealsFromScraperAPI('boxing gloves', channels.amazon); // Remplace 'boxing gloves' par ton critère de recherche
+    await fetchDealsFromScraperAPI('laptop', channels.amazon); // Recherche de produits avec le mot-clé 'laptop'
 }
 
 // Planification des recherches (exécute toutes les heures)
@@ -96,4 +108,3 @@ setInterval(() => {
     sendLogMessage('🔄 Lancement de la recherche de deals Amazon...');
     checkAmazonDeals();
 }, 3600000); // Toutes les heures
-
