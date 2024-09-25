@@ -13,7 +13,7 @@ const channels = {
     logs: '1285977835365994506', // ID du salon où les logs seront envoyés
 };
 
-// Liste des termes de recherche (au lieu de catégories)
+// Liste des termes de recherche
 const searchTerms = ['entretien', 'smartphone', 'gaming', 'jouet', 'enfant', 'jardin', 'bricolage', 'électronique', 'électroménager', 'pas cher', '1euro'];
 
 // Fonction pour envoyer des messages dans le salon de logs
@@ -43,8 +43,8 @@ async function sendProductEmbed(productData, channelID) {
         .setURL(productData.url)
         .setImage(productData.image)
         .addFields(
-            { name: 'Prix', value: `${productData.price_string}`, inline: true },
-            { name: 'Prix d\'origine', value: productData.original_price ? `${productData.original_price.price_string}` : 'N/A', inline: true },
+            { name: 'Prix', value: `${productData.price_string} €`, inline: true },
+            { name: 'Prix d\'origine', value: productData.original_price ? `${productData.original_price.price_string} €` : 'N/A', inline: true },
             { name: 'Évaluations', value: `${productData.total_reviews} avis`, inline: true },
             { name: 'Note', value: `${productData.stars} ⭐`, inline: true },
             { name: 'Prime', value: productData.has_prime ? 'Oui' : 'Non', inline: true },
@@ -55,7 +55,7 @@ async function sendProductEmbed(productData, channelID) {
     const discordChannel = client.channels.cache.get(channelID);
     if (discordChannel) {
         await discordChannel.send({ embeds: [embed] });
-        sendLogMessage(`📌 Produit ajouté : ${productData.name} - ${productData.price_string}`);
+        sendLogMessage(`📌 Produit ajouté : ${productData.name} - ${productData.price_string} €`);
     } else {
         console.log('Salon Discord introuvable.');
     }
@@ -70,7 +70,7 @@ async function fetchDealsFromScraperAPI(searchQuery, channelID) {
             params: {
                 api_key: process.env.SCRAPER_API_KEY, // Remplace par ta clé ScraperAPI
                 query: searchQuery,
-                domain: 'fr' // Spécifie que la recherche doit se faire sur Amazon France
+                domain: 'amazon.fr' // Spécifie que la recherche doit se faire sur Amazon France
             }
         });
 
@@ -83,7 +83,7 @@ async function fetchDealsFromScraperAPI(searchQuery, channelID) {
                 const currentPrice = product.price;
                 const discount = ((originalPrice - currentPrice) / originalPrice) * 100;
 
-                return discount >= 50; // Filtre sur 50% de réduction ou plus
+                return discount >= 80; // Filtre sur 50% de réduction ou plus
             }
             return false;
         });
